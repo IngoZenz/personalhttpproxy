@@ -1,0 +1,8 @@
+# List of wildcard based URL patterns which are filtered
+# Some examples below
+
+*://*adserve*
+*://*.google.*/uds/*file=ads*
+*://*.googleadservices.*/*
+*://adwords.google.*/*
+*://adservices.google.*/*
