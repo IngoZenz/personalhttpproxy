@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<resources>
+  <string name="app_name">HTTPproxy</string>
+  <string name="listenPortLabel">יציאת ה-proxy של HTTP:</string>
+  <string name="startBtnLabel">הפעל מחדש</string>
+  <string name="stopBtnLabel">צא</string>
+  <string name="filterReloadBtnLabel">מסנן טען מחדש</string>
+  <string name="EnableConfigCheckBox">הגדרות מתקדמות</string>
+  <string name="keepAwakeCheckBox">למנוע שינה התקן</string>
+  <string name="EnableAutoStart">אתחול אוטומטי</string>
+  <string name="EnableAdfilter">לאפשר חסימת מודעות</string>
+</resources>
