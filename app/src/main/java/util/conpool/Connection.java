@@ -101,7 +101,7 @@ public class Connection implements TimeoutListener {
 	}
 		
 	private static String[] parseHosts(String line) {
-		if (line.startsWith("#")|| line.equals(""))
+		if (line.startsWith("#")|| line.trim().equals(""))
 			return null;
 		StringTokenizer tokens = new StringTokenizer(line);
 		if (tokens.countTokens() >=2) {
