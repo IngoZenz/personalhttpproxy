@@ -23,8 +23,13 @@
 package util.conpool;
 
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -33,6 +38,8 @@ import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Hashtable;
+import java.util.StringTokenizer;
 import java.util.Vector;
 
 import util.Logger;
@@ -55,11 +62,16 @@ public class Connection implements TimeoutListener {
 
 	private static HashMap connPooled = new HashMap();
 	private static HashSet connAquired = new HashSet();
+	private static Hashtable CUSTOM_HOSTS = getCustomHosts();
 	private static int  POOLTIMEOUT_SECONDS = 300;	
 	private static TimoutNotificator toNotify = TimoutNotificator.getNewInstance();
 
 	private Connection(String host, int port, int conTimeout) throws IOException {
-		InetAddress adr = InetAddress.getByName(host);
+		InetAddress adr=null;
+		if (CUSTOM_HOSTS != null)
+			adr = (InetAddress) CUSTOM_HOSTS.get(host);
+		if (adr == null)
+			adr = InetAddress.getByName(host);
 		InetSocketAddress sadr = new InetSocketAddress(adr,port);
 		poolKey = host + ":" + port;
 		initConnection(sadr,conTimeout);	
@@ -68,6 +80,43 @@ public class Connection implements TimeoutListener {
 	}
 	
 	
+	private static Hashtable getCustomHosts() {
+		File hostsFile = new File("hosts");
+		String entry = null;
+		Hashtable custom_hosts = null;
+		try {
+			if (hostsFile.exists()) {
+				custom_hosts = new Hashtable();			
+				BufferedReader fin = new BufferedReader(new InputStreamReader(new FileInputStream(hostsFile)));
+				while ((entry = fin.readLine()) != null) {
+					String[] hostEntry = parseHosts(entry);
+					if (hostEntry != null)
+						custom_hosts.put(hostEntry[1], InetAddress.getByName(hostEntry[0]));
+				}
+			}
+		} catch (IOException ioe){
+			ioe.printStackTrace();
+		}
+		return custom_hosts;
+	}
+		
+	private static String[] parseHosts(String line) {
+		if (line.startsWith("#")|| line.equals(""))
+			return null;
+		StringTokenizer tokens = new StringTokenizer(line);
+		if (tokens.countTokens() >=2) {
+			String ip = tokens.nextToken().trim();
+			String host = tokens.nextToken().trim();
+			return new String[]{ip,host};
+		} else { //list with plain hosts
+			String ip = "127.0.0.1";
+			String host = tokens.nextToken().trim();
+			return new String[]{ip,host};
+		}			
+		
+	}
+
+
 	private Connection(InetSocketAddress sadr, int conTimeout) throws IOException {
 		poolKey = sadr.getAddress().getHostAddress() + ":" + sadr.getPort();
 		initConnection(sadr,conTimeout);		
