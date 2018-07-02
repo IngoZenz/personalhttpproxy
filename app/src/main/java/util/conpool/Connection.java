@@ -26,7 +26,6 @@ package util.conpool;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -42,7 +41,7 @@ import java.util.Hashtable;
 import java.util.StringTokenizer;
 import java.util.Vector;
 
-import util.Logger;
+import util.ExecutionEnvironment;
 import util.TimeoutListener;
 import util.TimeoutTime;
 import util.TimoutNotificator;
@@ -66,12 +65,12 @@ public class Connection implements TimeoutListener {
 	private static int  POOLTIMEOUT_SECONDS = 300;	
 	private static TimoutNotificator toNotify = TimoutNotificator.getNewInstance();
 
-	private Connection(String host, int port, int conTimeout) throws IOException {
+	private Connection(String host, int port, int conTimeout) throws IOException {		
 		InetAddress adr=null;
 		if (CUSTOM_HOSTS != null)
 			adr = (InetAddress) CUSTOM_HOSTS.get(host);
 		if (adr == null)
-			adr = InetAddress.getByName(host);
+			adr = InetAddress.getByName(host);		
 		InetSocketAddress sadr = new InetSocketAddress(adr,port);
 		poolKey = host + ":" + port;
 		initConnection(sadr,conTimeout);	
@@ -81,7 +80,7 @@ public class Connection implements TimeoutListener {
 	
 	
 	private static Hashtable getCustomHosts() {
-		File hostsFile = new File("hosts");
+		File hostsFile = new File(ExecutionEnvironment.getEnvironment().getWorkDir()+"hosts");		
 		String entry = null;
 		Hashtable custom_hosts = null;
 		try {
@@ -101,12 +100,12 @@ public class Connection implements TimeoutListener {
 	}
 		
 	private static String[] parseHosts(String line) {
-		if (line.startsWith("#")|| line.equals(""))
+		if (line.startsWith("#")|| line.trim().equals(""))
 			return null;
 		StringTokenizer tokens = new StringTokenizer(line);
 		if (tokens.countTokens() >=2) {
 			String ip = tokens.nextToken().trim();
-			String host = tokens.nextToken().trim();
+			String host = tokens.nextToken().trim();			
 			return new String[]{ip,host};
 		} else { //list with plain hosts
 			String ip = "127.0.0.1";
@@ -248,8 +247,7 @@ public class Connection implements TimeoutListener {
 				int avail = socketIn.available();
 				byte buf[] = new byte [Math.max(avail, 10240)];
 				socketIn.read(buf);
-				String data = ((char)r)+new String(buf);
-				Logger.getLogger().logException(new IllegalStateException("Connection.isAlive received data on pooled connection:\r\n"+data));
+				String data = ((char)r)+new String(buf);				
 			}
 			return false;
 		} catch (SocketTimeoutException to) {

@@ -107,4 +107,9 @@ public class HttpProxyService extends Service implements ExecutionEnvironmentInt
 		if (wl != null)
 			wl.release();		
 	}
+
+	@Override
+	public String getWorkDir() {
+		return HttpProxyActivity.WORKPATH.getAbsolutePath()+"/";
+	}
 }
