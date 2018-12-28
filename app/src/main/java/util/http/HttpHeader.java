@@ -39,12 +39,18 @@ public class HttpHeader {
 
 	public static final int REQUEST_HEADER = 1;
 	public static final int RESPONSE_HEADER = 2;
+	
+	public final static int HTTP=1;
+	public final static int HTTPS=2;
+	public final static int OTHER=3;
+	public final static int UNKNOWN=4;
 
 	// Http Request Params
 	public String remote_host_name = "";
 	public String hostEntry;
 	public String url;
 	public String method;
+	public int protocoll=UNKNOWN;
 	public int remote_port = 0;
 
 	public boolean tunnelMode = false;
@@ -187,6 +193,11 @@ public class HttpHeader {
 	public String getValue(String key) {
 		return (String) _mapping.get(key.toUpperCase());
 	}
+	
+	public String removeValue(String key) {
+		_keys.remove(key);
+		return (String) _mapping.remove(key.toUpperCase());		
+	}
 
 	public void appendValueToHeaderString(StringBuffer headerString, String key, String value) {
 		String[] tokens = value.split("_,_"); // multiple values per key!
@@ -302,7 +313,7 @@ public class HttpHeader {
 
 	private void parseURI() throws IOException {
 
-		// format: <method> <hostentry>/<url> HTTP<version>
+		// format: <method> <protocol>//<hostentry>/<url> HTTP<version>
 		int idx = _first.indexOf(' ');
 		int idx2 = _first.lastIndexOf(' ');
 		if (idx == -1 || idx == idx2)
@@ -312,9 +323,16 @@ public class HttpHeader {
 		url = _first.substring(idx + 1, idx2);
 		tunnelMode = (method.equalsIgnoreCase("CONNECT"));
 		if (!tunnelMode) {
-			if (url.length() >= 7 && url.substring(0, 7).equalsIgnoreCase("http://")) {
-
-				url = url.substring(7);
+			idx = url.indexOf("://");
+			if (idx != -1) {				
+				String prot = url.substring(0,idx).toLowerCase();
+				if (prot.equals("http"))
+					protocoll =  HTTP;
+				else if (prot.equals("https"))
+					protocoll =  HTTPS;
+				else 
+					protocoll =  OTHER;
+				url = url.substring(idx+3);
 				idx = url.indexOf('/');
 				if (idx == -1)
 					idx = url.length();
@@ -324,6 +342,7 @@ public class HttpHeader {
 				else
 					url = url.substring(idx);
 			}
+			
 		} else
 			hostEntry = url;
 
@@ -332,7 +351,13 @@ public class HttpHeader {
 	}
 
 	private void parseHostEntry() throws IOException {
-		remote_port = 80;
+		if (protocoll == HTTP)
+			remote_port = 80;
+		else if (protocoll == HTTPS)
+			remote_port = 443; 
+		else 
+			remote_port = -1;
+		
 		remote_host_name = hostEntry;
 
 		int idx = hostEntry.lastIndexOf(":"); // check for the port number
@@ -346,6 +371,8 @@ public class HttpHeader {
 			}
 			remote_host_name = hostEntry.substring(0, idx);
 		}
+		if (remote_port == -1)
+			throw new IOException("Bad Request - Cannot get port:" + _first);
 
 		// IPV6 e.g. [2a00:1450:400a:804::1010]
 		if (remote_host_name.startsWith("[") && remote_host_name.endsWith("]")) {

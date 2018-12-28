@@ -26,12 +26,14 @@ package util.conpool;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.Proxy;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
@@ -41,7 +43,10 @@ import java.util.Hashtable;
 import java.util.StringTokenizer;
 import java.util.Vector;
 
+import javax.net.ssl.SSLSocketFactory;
+
 import util.ExecutionEnvironment;
+import util.Logger;
 import util.TimeoutListener;
 import util.TimeoutTime;
 import util.TimoutNotificator;
@@ -58,6 +63,7 @@ public class Connection implements TimeoutListener {
 	TimeoutTime timeout;
 	boolean aquired = true;
 	boolean valid = true;
+	boolean ssl = false;
 
 	private static HashMap connPooled = new HashMap();
 	private static HashSet connAquired = new HashSet();
@@ -65,19 +71,73 @@ public class Connection implements TimeoutListener {
 	private static int  POOLTIMEOUT_SECONDS = 300;	
 	private static TimoutNotificator toNotify = TimoutNotificator.getNewInstance();
 
-	private Connection(String host, int port, int conTimeout) throws IOException {		
+	private Connection(String host, int port, int conTimeout, boolean ssl, SSLSocketFactory sslSocketFactory, Proxy proxy) throws IOException {		
 		InetAddress adr=null;
-		if (CUSTOM_HOSTS != null)
-			adr = (InetAddress) CUSTOM_HOSTS.get(host);
-		if (adr == null)
-			adr = InetAddress.getByName(host);		
+		if (proxy == Proxy.NO_PROXY) {
+			if (CUSTOM_HOSTS != null)
+				adr = (InetAddress) CUSTOM_HOSTS.get(host);
+			if (adr == null)
+				adr = InetAddress.getByName(host);			
+		} else //leave name resolution to proxy!
+			adr = InetAddress.getByAddress(host, new byte[]{0,0,0,0});
+			
 		InetSocketAddress sadr = new InetSocketAddress(adr,port);
-		poolKey = host + ":" + port;
-		initConnection(sadr,conTimeout);	
-		timeout = new TimeoutTime(toNotify);
-		
+		poolKey = poolKey(host,port,ssl,proxy);
+		initConnection(sadr,conTimeout, ssl,sslSocketFactory, proxy);	
+		timeout = new TimeoutTime(toNotify);		
+	}
+
+	private Connection(InetSocketAddress sadr, int conTimeout, boolean ssl,SSLSocketFactory sslSocketFactory, Proxy proxy) throws IOException {
+		poolKey = poolKey(sadr.getAddress().getHostAddress(),sadr.getPort(), ssl, proxy);
+		initConnection(sadr,conTimeout, ssl, sslSocketFactory, proxy);		
+		timeout = new TimeoutTime(toNotify);		
 	}
 	
+	public static Connection connect(InetSocketAddress sadr, int conTimeout, boolean ssl, SSLSocketFactory sslSocketFactory, Proxy proxy) throws IOException {
+
+		Connection con = poolRemove(poolKey(sadr.getAddress().getHostAddress(), sadr.getPort(), ssl, proxy));
+		if (con == null) {	
+			con = new Connection(sadr,conTimeout, ssl, sslSocketFactory, proxy);
+		}		
+		con.initStreams();
+		connAquired.add(con);
+		return con;
+	}
+	
+	public static Connection connect(InetSocketAddress sadr, int conTimeout) throws IOException {
+		return connect(sadr, conTimeout, false, null, Proxy.NO_PROXY);
+	}
+	
+	public static Connection connect(InetSocketAddress address)	throws IOException {
+		return connect(address,-1);
+	}
+	
+	public static Connection connect(String host, int port, int conTimeout, boolean ssl, SSLSocketFactory sslSocketFactory, Proxy proxy) throws IOException {
+
+		Connection con = poolRemove(poolKey(host, port, ssl, proxy));
+		if (con == null) {			
+			con = new Connection(host, port, conTimeout, ssl, sslSocketFactory, proxy);		
+		}		
+		con.initStreams();
+		connAquired.add(con);
+		return con;
+	}
+	
+	public static Connection connect(String host, int port) throws IOException {
+		return connect(host,port,-1, false, null, Proxy.NO_PROXY);
+	}
+	
+	public static Connection connect(String host, int port, int conTimeout) throws IOException {
+		return connect(host,port,conTimeout, false, null, Proxy.NO_PROXY);
+	}
+	
+	
+	private static String poolKey (String host, int port, boolean ssl, Proxy proxy) {
+		if (ssl)
+			return host+":"+port+":"+"ssl:"+proxy.hashCode();
+		else 
+			return host+":"+port+":"+"plain:"+proxy.hashCode();
+	}
 	
 	private static Hashtable getCustomHosts() {
 		File hostsFile = new File(ExecutionEnvironment.getEnvironment().getWorkDir()+"hosts");		
@@ -114,57 +174,33 @@ public class Connection implements TimeoutListener {
 		}			
 		
 	}
-
-
-	private Connection(InetSocketAddress sadr, int conTimeout) throws IOException {
-		poolKey = sadr.getAddress().getHostAddress() + ":" + sadr.getPort();
-		initConnection(sadr,conTimeout);		
-		timeout = new TimeoutTime(toNotify);		
-	}
 	
-	private void initConnection(InetSocketAddress sadr, int conTimeout) throws IOException {
-		socket = new Socket();
+	private void initConnection(InetSocketAddress sadr, int conTimeout, boolean ssl, SSLSocketFactory sslSocketFactory, Proxy proxy) throws IOException {
 		
-		if (conTimeout > 0)				
+		if (conTimeout <0)
+			conTimeout= 0;
+		
+		if (proxy == Proxy.NO_PROXY) {
+			socket = new Socket();	
 			socket.connect(sadr,conTimeout);
-		else 
-			socket.connect(sadr);
+		} else {
+			if (! (proxy instanceof HttpProxy))
+				throw new IOException ("Only "+HttpProxy.class.getName() +" supported for creating connection over tunnel!");
+			socket = ((HttpProxy) proxy).openTunnel(sadr.getHostName(), sadr.getPort(), conTimeout);				
+		}
+		if (ssl) {
+			if (sslSocketFactory==null)
+				sslSocketFactory=(SSLSocketFactory) SSLSocketFactory.getDefault();
+			socket = sslSocketFactory.createSocket(socket, sadr.getHostName(), sadr.getPort(), true);
+			this.ssl = true;
+		}
 		
 		socketIn = socket.getInputStream();
 		socketOut = socket.getOutputStream();
 	}
 
 	
-	public static Connection connect(InetSocketAddress sadr, int conTimeout) throws IOException {
 
-		Connection con = poolRemove(sadr.getAddress().getHostAddress(), sadr.getPort());
-		if (con == null) {	
-			con = new Connection(sadr,conTimeout);
-		}		
-		con.initStreams();
-		connAquired.add(con);
-		return con;
-	}
-	
-	public static Connection connect(InetSocketAddress address)	throws IOException {
-		return connect(address,-1);
-	}
-	
-	public static Connection connect(String host, int port, int conTimeout) throws IOException {
-
-		Connection con = poolRemove(host, port);
-		if (con == null) {			
-			con = new Connection(host, port, conTimeout);		
-		}		
-		con.initStreams();
-		connAquired.add(con);
-		return con;
-	}
-	
-	public static Connection connect(String host, int port) throws IOException {
-		return connect(host,port,-1);
-	}
-	
 	public static void setPoolTimeoutSeconds(int secs) {
 		POOLTIMEOUT_SECONDS=secs;
 	}
@@ -192,7 +228,7 @@ public class Connection implements TimeoutListener {
 	public static void poolReuse(Connection con) {
 		synchronized (connPooled) {
 			if (!con.aquired)
-				throw new IllegalStateException("Inconsistwent Connection State - Cannot release non aquired connection");
+				throw new IllegalStateException("Inconsistent Connection State - Cannot release non aquired connection");
 			con.aquired=false;
 			Vector hostCons = (Vector) connPooled.get(con.poolKey);
 			if (hostCons == null) {
@@ -207,8 +243,8 @@ public class Connection implements TimeoutListener {
 
 	}
 
-	public static Connection poolRemove(String host, int port) {
-		String key = host + ":" + port;
+	public static Connection poolRemove(String key) {
+		
 		synchronized (connPooled) {
 			Vector hostCons = (Vector) connPooled.get(key);
 			if (hostCons == null) {
@@ -292,8 +328,10 @@ public class Connection implements TimeoutListener {
 		} else  {
 			try {
 				valid = false;
-				socket.shutdownOutput();
-				socket.shutdownInput();
+				if (!ssl) { //SSLSocket doesn't support this
+					socket.shutdownOutput();
+					socket.shutdownInput();
+				}					
 				socket.close();
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
@@ -341,7 +379,7 @@ public class Connection implements TimeoutListener {
 	}
 	
 	
-	// return destination (host:port)
+	// return destination (host:port:transport:proxy)
 	public String getDestination() {
 		return poolKey;
 	}
