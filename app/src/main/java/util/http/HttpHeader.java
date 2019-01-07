@@ -25,6 +25,7 @@ package util.http;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Vector;
@@ -63,7 +64,7 @@ public class HttpHeader {
 
 	private int type;
 
-	public HttpHeader(InputStream in, int type) throws IOException {
+	public HttpHeader(InputStream in, int type) throws IOException {		
 
 		_keys = new Vector();
 		_mapping = new HashMap();
@@ -370,9 +371,7 @@ public class HttpHeader {
 				throw new IOException("Bad Request - Cannot parse port to int:" + _first);
 			}
 			remote_host_name = hostEntry.substring(0, idx);
-		}
-		if (remote_port == -1)
-			throw new IOException("Bad Request - Cannot get port:" + _first);
+		}	
 
 		// IPV6 e.g. [2a00:1450:400a:804::1010]
 		if (remote_host_name.startsWith("[") && remote_host_name.endsWith("]")) {
