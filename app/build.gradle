@@ -1,6 +1,6 @@
 apply plugin: 'com.android.application'
 android {
-    compileSdkVersion 9
+    compileSdk 33
 
     defaultConfig {
         applicationId "httpproxy.android"
@@ -21,6 +21,7 @@ android {
         // but continue the build even when errors are found:
         abortOnError false
     }
+    namespace 'httpproxy.android'
 
 }
 

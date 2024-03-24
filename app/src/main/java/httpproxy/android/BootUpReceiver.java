@@ -29,6 +29,7 @@ import java.util.Properties;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.os.Build;
 import android.os.Environment;
 
 public class BootUpReceiver extends BroadcastReceiver{
@@ -37,10 +38,15 @@ public class BootUpReceiver extends BroadcastReceiver{
     public void onReceive(Context context, Intent intent) {
     	Properties config;
     	if ((config = getConfig()) != null && Boolean.parseBoolean(config.getProperty("AUTOSTART", "false"))) {
-	    	HttpProxyActivity.BOOT_START=true;
-	        Intent i = new Intent(context, HttpProxyActivity.class);  
-	        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-	        context.startActivity(i);  
+			if (Build.VERSION.SDK_INT >= 28) {
+				Intent i = new Intent(context, HttpProxyService.class);
+				context.startService(i);
+			} else {
+				HttpProxyActivity.BOOT_START = true;
+				Intent i = new Intent(context, HttpProxyActivity.class);
+				i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+				context.startActivity(i);
+			}
     	}
             
     }

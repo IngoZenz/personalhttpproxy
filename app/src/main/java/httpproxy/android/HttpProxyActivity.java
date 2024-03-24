@@ -575,8 +575,9 @@ public class HttpProxyActivity extends Activity implements OnClickListener, Logg
 			stopService(SERVICE);
 		SERVICE = null;
 		appStart = true;
-		//finish();	
-		System.exit(0);
+		finish();
+
+		//System.exit(0);
 	}
 
 	private void handleStart() {			
